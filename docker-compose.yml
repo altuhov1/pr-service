@@ -1,0 +1,58 @@
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    environment:
+      POSTGRES_USER: ${USER_DB_PG} 
+      POSTGRES_PASSWORD: ${PASS_DB_PG}
+      POSTGRES_DB: ${NAME_DB_PG}
+    volumes:
+      - ./docker/postgres/init-scripts:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - internal
+
+  app:
+    networks:
+      - internal
+      - public
+    build: 
+      context: .
+      dockerfile: Dockerfile.golang
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data      
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      - app
+    networks:
+      - internal
+      - public
+
+networks:
+  internal:
+    internal: true
+  public:
+
+
+volumes:
+  postgres_data:
+  caddy_logs:
+  caddy_data: 
+  caddy_config: 
