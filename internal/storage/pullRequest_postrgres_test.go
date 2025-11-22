@@ -1,12 +1,5 @@
 package storage
 
-/*
-Тесты через создание контейнера с постгрес
-Проверка:
-	1. Создание PR
-	2. Merge
-
-*/
 import (
 	"context"
 	"test-task/internal/models"
@@ -59,7 +52,7 @@ func setupTestPRDB(t *testing.T) *pgxpool.Pool {
 			author_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			assigned_reviewers TEXT[],
-			created_at TIMESTAMP WITH TIME ZONE NOT NULL, -- Используем TIMESTAMPTZ
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL,
 			merged_at TIMESTAMP WITH TIME ZONE
 		)
 	`)
@@ -74,12 +67,15 @@ func setupTestPRDB(t *testing.T) *pgxpool.Pool {
 }
 
 func TestPullRequestPostgresStorage_Integration(t *testing.T) {
-
 	pool := setupTestPRDB(t)
 	storage := NewPullRequestPostgresStorage(pool)
 	ctx := context.Background()
 
 	t.Run("Create and Get PR", func(t *testing.T) {
+		tx, err := storage.PRBeginTx(ctx)
+		require.NoError(t, err)
+		defer tx.Rollback(ctx)
+
 		testPR := models.PullRequest{
 			PullRequestID:     "PR-001",
 			PullRequestName:   "Test Feature",
@@ -89,10 +85,10 @@ func TestPullRequestPostgresStorage_Integration(t *testing.T) {
 			CreatedAt:         time.Now().UTC(),
 		}
 
-		err := storage.CreatePR(ctx, testPR)
+		err = storage.CreatePRTx(ctx, tx, testPR)
 		require.NoError(t, err)
 
-		retrievedPR, err := storage.GetPRByID(ctx, testPR.PullRequestID)
+		retrievedPR, err := storage.GetPRByIDTx(ctx, tx, testPR.PullRequestID)
 		require.NoError(t, err)
 
 		assert.Equal(t, testPR.PullRequestID, retrievedPR.PullRequestID)
@@ -100,13 +96,18 @@ func TestPullRequestPostgresStorage_Integration(t *testing.T) {
 		assert.Equal(t, testPR.AuthorID, retrievedPR.AuthorID)
 		assert.Equal(t, testPR.Status, retrievedPR.Status)
 		assert.ElementsMatch(t, testPR.AssignedReviewers, retrievedPR.AssignedReviewers)
-
 		assert.False(t, retrievedPR.CreatedAt.IsZero())
-
 		assert.WithinDuration(t, testPR.CreatedAt, retrievedPR.CreatedAt, 5*time.Second)
+
+		err = tx.Commit(ctx)
+		require.NoError(t, err)
 	})
 
 	t.Run("Merge PR and verify status", func(t *testing.T) {
+		tx, err := storage.PRBeginTx(ctx)
+		require.NoError(t, err)
+		defer tx.Rollback(ctx)
+
 		testPR := models.PullRequest{
 			PullRequestID:     "PR-MERGE-TEST",
 			PullRequestName:   "Merge Test",
@@ -116,21 +117,22 @@ func TestPullRequestPostgresStorage_Integration(t *testing.T) {
 			CreatedAt:         time.Now().UTC(),
 		}
 
-		err := storage.CreatePR(ctx, testPR)
+		err = storage.CreatePRTx(ctx, tx, testPR)
 		require.NoError(t, err)
 
-		err = storage.MergePR(ctx, testPR.PullRequestID)
+		err = storage.MergePRTx(ctx, tx, testPR.PullRequestID)
 		require.NoError(t, err)
 
-		mergedPR, err := storage.GetPRByID(ctx, testPR.PullRequestID)
+		mergedPR, err := storage.GetPRByIDTx(ctx, tx, testPR.PullRequestID)
 		require.NoError(t, err)
 		assert.Equal(t, "MERGED", mergedPR.Status)
 		assert.NotNil(t, mergedPR.MergedAt)
-
 		assert.WithinDuration(t, time.Now().UTC(), *mergedPR.MergedAt, 5*time.Second)
 
-		err = storage.MergePR(ctx, testPR.PullRequestID)
+		err = storage.MergePRTx(ctx, tx, testPR.PullRequestID)
+		require.NoError(t, err)
+
+		err = tx.Commit(ctx)
 		require.NoError(t, err)
 	})
-
 }

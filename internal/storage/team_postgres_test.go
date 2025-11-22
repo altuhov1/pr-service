@@ -81,11 +81,26 @@ func TestTeamPostgresStorage_CreateTeam_Success(t *testing.T) {
 		},
 	}
 
-	err := storage.CreateTeam(ctx, team)
+	tx, err := storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = storage.CreateTeamTx(ctx, tx, team)
 	require.NoError(t, err)
 
-	createdTeam, err := storage.GetTeamInfo(ctx, "backend")
+	err = tx.Commit(ctx)
 	require.NoError(t, err)
+
+	tx, err = storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	createdTeam, err := storage.GetTeamInfoTx(ctx, tx, "backend")
+	require.NoError(t, err)
+
+	err = tx.Commit(ctx)
+	require.NoError(t, err)
+
 	assert.Equal(t, "backend", createdTeam.TeamName)
 	assert.Len(t, createdTeam.Members, 2)
 }
@@ -102,11 +117,23 @@ func TestTeamPostgresStorage_CreateTeam_AlreadyExists(t *testing.T) {
 		},
 	}
 
-	err := storage.CreateTeam(ctx, team)
+	tx, err := storage.TeamBeginTx(ctx)
 	require.NoError(t, err)
 
-	err = storage.CreateTeam(ctx, team)
+	err = storage.CreateTeamTx(ctx, tx, team)
+	require.NoError(t, err)
+
+	err = tx.Commit(ctx)
+	require.NoError(t, err)
+
+	tx, err = storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = storage.CreateTeamTx(ctx, tx, team)
 	assert.ErrorIs(t, err, models.ErrTeamExists)
+
+	tx.Rollback(ctx)
 }
 
 func TestTeamPostgresStorage_GetTeamInfo_NotFound(t *testing.T) {
@@ -114,7 +141,11 @@ func TestTeamPostgresStorage_GetTeamInfo_NotFound(t *testing.T) {
 	storage := NewTeamPostgresStorage(pool)
 	ctx := context.Background()
 
-	team, err := storage.GetTeamInfo(ctx, "nonexistent")
+	tx, err := storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	team, err := storage.GetTeamInfoTx(ctx, tx, "nonexistent")
 	assert.ErrorIs(t, err, models.ErrNotFound)
 	assert.Nil(t, team)
 }
@@ -124,13 +155,22 @@ func TestTeamPostgresStorage_CreateTeam_UpdatesUserTeam(t *testing.T) {
 	storage := NewTeamPostgresStorage(pool)
 	ctx := context.Background()
 
+	tx, err := storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+
 	team1 := models.Team{
 		TeamName: "team1",
 		Members: []models.User{
 			{UserID: "u1", Username: "Alice", TeamName: "team1", IsActive: true},
 		},
 	}
-	err := storage.CreateTeam(ctx, team1)
+	err = storage.CreateTeamTx(ctx, tx, team1)
+	require.NoError(t, err)
+
+	err = tx.Commit(ctx)
+	require.NoError(t, err)
+
+	tx, err = storage.TeamBeginTx(ctx)
 	require.NoError(t, err)
 
 	team2 := models.Team{
@@ -139,10 +179,17 @@ func TestTeamPostgresStorage_CreateTeam_UpdatesUserTeam(t *testing.T) {
 			{UserID: "u1", Username: "Alice", TeamName: "team2", IsActive: false},
 		},
 	}
-	err = storage.CreateTeam(ctx, team2)
+	err = storage.CreateTeamTx(ctx, tx, team2)
 	require.NoError(t, err)
 
-	team, err := storage.GetTeamInfo(ctx, "team2")
+	err = tx.Commit(ctx)
+	require.NoError(t, err)
+
+	tx, err = storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	team, err := storage.GetTeamInfoTx(ctx, tx, "team2")
 	require.NoError(t, err)
 	assert.Equal(t, "team2", team.Members[0].TeamName)
 	assert.False(t, team.Members[0].IsActive)
@@ -162,10 +209,20 @@ func TestTeamPostgresStorage_GetTeamInfo_Success(t *testing.T) {
 		},
 	}
 
-	err := storage.CreateTeam(ctx, expectedTeam)
+	tx, err := storage.TeamBeginTx(ctx)
 	require.NoError(t, err)
 
-	actualTeam, err := storage.GetTeamInfo(ctx, "frontend")
+	err = storage.CreateTeamTx(ctx, tx, expectedTeam)
+	require.NoError(t, err)
+
+	err = tx.Commit(ctx)
+	require.NoError(t, err)
+
+	tx, err = storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	actualTeam, err := storage.GetTeamInfoTx(ctx, tx, "frontend")
 	require.NoError(t, err)
 	require.NotNil(t, actualTeam)
 
@@ -191,4 +248,34 @@ func TestTeamPostgresStorage_GetTeamInfo_Success(t *testing.T) {
 	assert.Equal(t, "Charlie", memberMap["u3"].Username)
 	assert.Equal(t, "frontend", memberMap["u3"].TeamName)
 	assert.False(t, memberMap["u3"].IsActive)
+}
+
+func TestTeamPostgresStorage_Transaction_Rollback(t *testing.T) {
+	pool := setupTestDB(t)
+	storage := NewTeamPostgresStorage(pool)
+	ctx := context.Background()
+
+	team := models.Team{
+		TeamName: "rollback_test",
+		Members: []models.User{
+			{UserID: "u1", Username: "TestUser", TeamName: "rollback_test", IsActive: true},
+		},
+	}
+
+	tx, err := storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+
+	err = storage.CreateTeamTx(ctx, tx, team)
+	require.NoError(t, err)
+
+
+	err = tx.Rollback(ctx)
+	require.NoError(t, err)
+
+	tx, err = storage.TeamBeginTx(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	_, err = storage.GetTeamInfoTx(ctx, tx, "rollback_test")
+	assert.ErrorIs(t, err, models.ErrNotFound)
 }

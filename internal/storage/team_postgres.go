@@ -4,13 +4,17 @@ package storage
 Основные функции:
 	1. Создание команды
 	2. Получение информации о команде
+	3. Создать транзакцию
 
 Создание команды проихсодит атомарно.
 При создании происходит проверка через SQL запрос на то, существет
 ли человек, если да - обновляем его данные.
 
 Поиск юзеров за log из-за индексов
+
+Фича - если Tx - nil, то используем просто pool
 */
+
 import (
 	"context"
 	"fmt"
@@ -28,15 +32,27 @@ func NewTeamPostgresStorage(pool *pgxpool.Pool) *TeamPostgresStorage {
 	return &TeamPostgresStorage{pool: pool}
 }
 
-func (s *TeamPostgresStorage) CreateTeam(ctx context.Context, team models.Team) error {
-	tx, err := s.pool.Begin(ctx)
+func (s *TeamPostgresStorage) TeamBeginTx(ctx context.Context) (pgx.Tx, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.Serializable,
+		AccessMode: pgx.ReadWrite,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	return tx, nil
+}
 
+func (s *TeamPostgresStorage) CreateTeamTx(ctx context.Context, tx pgx.Tx, team models.Team) error {
 	var exists bool
-	err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM teams WHERE name = $1)", team.TeamName).Scan(&exists)
+	var row pgx.Row
+	if tx != nil {
+		row = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM teams WHERE name = $1)", team.TeamName)
+	} else {
+		row = s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM teams WHERE name = $1)", team.TeamName)
+	}
+
+	err := row.Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("failed to check team existence: %w", err)
 	}
@@ -44,35 +60,47 @@ func (s *TeamPostgresStorage) CreateTeam(ctx context.Context, team models.Team) 
 		return models.ErrTeamExists
 	}
 
-	_, err = tx.Exec(ctx, "INSERT INTO teams (name) VALUES ($1)", team.TeamName)
+	if tx != nil {
+		_, err = tx.Exec(ctx, "INSERT INTO teams (name) VALUES ($1)", team.TeamName)
+	} else {
+		_, err = s.pool.Exec(ctx, "INSERT INTO teams (name) VALUES ($1)", team.TeamName)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create team: %w", err)
 	}
 
 	for _, member := range team.Members {
-		if err := s.createUser(ctx, tx, member); err != nil {
+		if err := s.createUserTx(ctx, tx, member); err != nil {
 			return fmt.Errorf("failed to create user %s: %w", member.UserID, err)
 		}
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
-func (s *TeamPostgresStorage) createUser(ctx context.Context, tx pgx.Tx, user models.User) error {
+func (s *TeamPostgresStorage) createUserTx(ctx context.Context, tx pgx.Tx, user models.User) error {
 	query := `
 		INSERT INTO users (user_id, username, team_name, is_active) 
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id) 
 		DO UPDATE SET username = EXCLUDED.username, team_name = EXCLUDED.team_name, is_active = EXCLUDED.is_active
 	`
-	_, err := tx.Exec(ctx, query, user.UserID, user.Username, user.TeamName, user.IsActive)
-	if err != nil {
-		return fmt.Errorf("failed to create/update user: %w", err)
+
+	if tx != nil {
+		_, err := tx.Exec(ctx, query, user.UserID, user.Username, user.TeamName, user.IsActive)
+		if err != nil {
+			return fmt.Errorf("failed to create/update user: %w", err)
+		}
+	} else {
+		_, err := s.pool.Exec(ctx, query, user.UserID, user.Username, user.TeamName, user.IsActive)
+		if err != nil {
+			return fmt.Errorf("failed to create/update user: %w", err)
+		}
 	}
 	return nil
 }
 
-func (s *TeamPostgresStorage) GetTeamInfo(ctx context.Context, teamName string) (*models.Team, error) {
+func (s *TeamPostgresStorage) GetTeamInfoTx(ctx context.Context, tx pgx.Tx, teamName string) (*models.Team, error) {
 	query := `
         SELECT 
             t.name as team_name, 
@@ -86,7 +114,15 @@ func (s *TeamPostgresStorage) GetTeamInfo(ctx context.Context, teamName string) 
         ORDER BY u.user_id
     `
 
-	rows, err := s.pool.Query(ctx, query, teamName)
+	var rows pgx.Rows
+	var err error
+
+	if tx != nil {
+		rows, err = tx.Query(ctx, query, teamName)
+	} else {
+		rows, err = s.pool.Query(ctx, query, teamName)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to query team: %w", err)
 	}

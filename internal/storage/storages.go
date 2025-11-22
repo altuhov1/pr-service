@@ -3,23 +3,28 @@ package storage
 import (
 	"context"
 	"test-task/internal/models"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type PullReqStorage interface {
-	CreatePR(ctx context.Context, pr models.PullRequest) error
-	GetPRByID(ctx context.Context, prID string) (*models.PullRequest, error)
-	MergePR(ctx context.Context, prID string) error
-	UpdatePRReviewers(ctx context.Context, prID string, reviewers []string) error
-	GetPRsByReviewer(ctx context.Context, userID string) ([]models.PullRequestShort, error)
-	CheckPRExists(ctx context.Context, prID string) (bool, error)
+	CreatePRTx(ctx context.Context, tx pgx.Tx, pr models.PullRequest) error
+	GetPRByIDTx(ctx context.Context, tx pgx.Tx, prID string) (*models.PullRequest, error)
+	MergePRTx(ctx context.Context, tx pgx.Tx, prID string) error
+	UpdatePRReviewersTx(ctx context.Context, tx pgx.Tx, prID string, reviewers []string) error
+	GetPRsByReviewerTx(ctx context.Context, tx pgx.Tx, userID string) ([]models.PullRequestShort, error)
+
+	PRBeginTx(ctx context.Context) (pgx.Tx, error)
 }
 
 type TeamStorage interface {
-	CreateTeam(ctx context.Context, team models.Team) error
-	GetTeamInfo(ctx context.Context, teamName string) (*models.Team, error)
+	CreateTeamTx(ctx context.Context, tx pgx.Tx, team models.Team) error
+	GetTeamInfoTx(ctx context.Context, tx pgx.Tx, teamName string) (*models.Team, error)
+	TeamBeginTx(ctx context.Context) (pgx.Tx, error)
 }
 
 type UserStorage interface {
-	GetUser(ctx context.Context, userID string) (*models.User, error)
-	UpdateUserActive(ctx context.Context, userID string, isActive bool) error
+	GetUserTx(ctx context.Context, tx pgx.Tx, userID string) (*models.User, error)
+	UpdateUserActiveTx(ctx context.Context, tx pgx.Tx, userID string, isActive bool) error
+	UserBeginTx(ctx context.Context) (pgx.Tx, error)
 }

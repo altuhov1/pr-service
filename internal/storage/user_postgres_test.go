@@ -113,11 +113,19 @@ func setupTestDatabase(t *testing.T) *pgxpool.Pool {
 func TestUserPostgresStorage_GetUser(t *testing.T) {
 	pool := setupTestDatabase(t)
 	storage := NewUserPostgresStorage(pool)
+	ctx := context.Background()
 
 	t.Run("successfully get user", func(t *testing.T) {
-		user, err := storage.GetUser(context.Background(), "user1")
+		tx, err := storage.UserBeginTx(ctx)
+		require.NoError(t, err)
+		defer tx.Rollback(ctx)
 
-		assert.NoError(t, err)
+		user, err := storage.GetUserTx(ctx, tx, "user1")
+		require.NoError(t, err)
+
+		err = tx.Commit(ctx)
+		require.NoError(t, err)
+
 		assert.Equal(t, "user1", user.UserID)
 		assert.Equal(t, "john_doe", user.Username)
 		assert.Equal(t, "Team Alpha", user.TeamName)
@@ -125,7 +133,11 @@ func TestUserPostgresStorage_GetUser(t *testing.T) {
 	})
 
 	t.Run("user not found", func(t *testing.T) {
-		user, err := storage.GetUser(context.Background(), "nonexistent")
+		tx, err := storage.UserBeginTx(ctx)
+		require.NoError(t, err)
+		defer tx.Rollback(ctx)
+
+		user, err := storage.GetUserTx(ctx, tx, "nonexistent")
 
 		assert.Error(t, err)
 		assert.Equal(t, models.ErrNotFound, err)
@@ -136,18 +148,34 @@ func TestUserPostgresStorage_GetUser(t *testing.T) {
 func TestUserPostgresStorage_UpdateUserActive(t *testing.T) {
 	pool := setupTestDatabase(t)
 	storage := NewUserPostgresStorage(pool)
+	ctx := context.Background()
 
 	t.Run("successfully update user active status", func(t *testing.T) {
-		err := storage.UpdateUserActive(context.Background(), "user1", false)
-		assert.NoError(t, err)
+		tx, err := storage.UserBeginTx(ctx)
+		require.NoError(t, err)
 
-		user, err := storage.GetUser(context.Background(), "user1")
-		assert.NoError(t, err)
+		err = storage.UpdateUserActiveTx(ctx, tx, "user1", false)
+		require.NoError(t, err)
+
+		err = tx.Commit(ctx)
+		require.NoError(t, err)
+
+		// Проверяем, что обновление применилось
+		tx2, err := storage.UserBeginTx(ctx)
+		require.NoError(t, err)
+		defer tx2.Rollback(ctx)
+
+		user, err := storage.GetUserTx(ctx, tx2, "user1")
+		require.NoError(t, err)
 		assert.False(t, user.IsActive)
 	})
 
 	t.Run("update non-existent user", func(t *testing.T) {
-		err := storage.UpdateUserActive(context.Background(), "nonexistent", true)
+		tx, err := storage.UserBeginTx(ctx)
+		require.NoError(t, err)
+		defer tx.Rollback(ctx)
+
+		err = storage.UpdateUserActiveTx(ctx, tx, "nonexistent", true)
 
 		assert.Error(t, err)
 		assert.Equal(t, models.ErrNotFound, err)

@@ -6,7 +6,6 @@ import (
 	"test-task/internal/models"
 )
 
-// CreatePR создает новый Pull Request
 // POST /pullRequest/create
 func (h *Handler) CreatePR(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -47,7 +46,6 @@ func (h *Handler) CreatePR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// MergePR помечает PR как мерженый
 // POST /pullRequest/merge
 func (h *Handler) MergePR(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -88,7 +86,6 @@ func (h *Handler) MergePR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// ReassignReviewer переназначает ревьювера
 // POST /pullRequest/reassign
 func (h *Handler) ReassignReviewer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -133,7 +130,6 @@ func (h *Handler) ReassignReviewer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetUserReviews возвращает PR где пользователь назначен ревьювером
 // GET /users/getReview
 func (h *Handler) GetUserReviews(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

@@ -1,18 +1,21 @@
 package services
-
 /*
-Основные функции:
-	1. Создание пул ревеста(по айди человека находим команду, находим свободных
-и отправяем в бд)
-	2. Merge 
-	3. Переопределение пользователя на pr
-	4. Посмотреть  по юзер айди ревьюеров
+Функции:
+	1. Создание pr
+	2. Merge
+	3. Переназначение пользоватля
+	4. По пользователю найти Ревью
+
+Основная сложность в написании сервиса была связана с возможным рейс кондишн.
+Было исправлено за счет транзакций 
 */
 import (
 	"context"
 	"strings"
 	"test-task/internal/models"
 	"test-task/internal/storage"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type PullRequestService struct {
@@ -34,18 +37,23 @@ func NewPullRequestService(
 }
 
 func (s *PullRequestService) CreatePR(ctx context.Context, req models.CreatePRRequest) (*models.PullRequest, error) {
-	author, err := s.userStorage.GetUser(ctx, req.AuthorID)
+	tx, err := s.PullRequestServ.PRBeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	author, err := s.userStorage.GetUserTx(ctx, tx, req.AuthorID)
 	if err != nil {
 		return nil, models.ErrNotFound
 	}
 
-	team, err := s.teamStorage.GetTeamInfo(ctx, author.TeamName)
+	team, err := s.teamStorage.GetTeamInfoTx(ctx, tx, author.TeamName)
 	if err != nil {
 		return nil, models.ErrNotFound
 	}
 
 	reviewers := s.findReviewersFromTeam(team, req.AuthorID)
-
 
 	pr := models.PullRequest{
 		PullRequestID:     req.PullRequestID,
@@ -55,11 +63,15 @@ func (s *PullRequestService) CreatePR(ctx context.Context, req models.CreatePRRe
 		AssignedReviewers: reviewers,
 	}
 
-	err = s.PullRequestServ.CreatePR(ctx, pr)
+	err = s.PullRequestServ.CreatePRTx(ctx, tx, pr)
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			return nil, models.ErrPRExists
 		}
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -81,20 +93,42 @@ func (s *PullRequestService) findReviewersFromTeam(team *models.Team, authorID s
 }
 
 func (s *PullRequestService) MergePR(ctx context.Context, prID string) (*models.PullRequest, error) {
-	_, err := s.PullRequestServ.GetPRByID(ctx, prID)
+	tx, err := s.PullRequestServ.PRBeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = s.PullRequestServ.GetPRByIDTx(ctx, tx, prID)
 	if err != nil {
 		return nil, models.ErrNotFound
 	}
-	err = s.PullRequestServ.MergePR(ctx, prID)
+
+	err = s.PullRequestServ.MergePRTx(ctx, tx, prID)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.PullRequestServ.GetPRByID(ctx, prID)
+	pr, err := s.PullRequestServ.GetPRByIDTx(ctx, tx, prID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return pr, nil
 }
 
 func (s *PullRequestService) ReassignReviewer(ctx context.Context, req models.ReassignRequest) (*models.PullRequest, string, error) {
-	pr, err := s.PullRequestServ.GetPRByID(ctx, req.PullRequestID)
+	tx, err := s.PullRequestServ.PRBeginTx(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	defer tx.Rollback(ctx)
+
+	pr, err := s.PullRequestServ.GetPRByIDTx(ctx, tx, req.PullRequestID)
 	if err != nil {
 		return nil, "", models.ErrNotFound
 	}
@@ -107,43 +141,65 @@ func (s *PullRequestService) ReassignReviewer(ctx context.Context, req models.Re
 		return nil, "", models.ErrNotAssigned
 	}
 
-	author, err := s.userStorage.GetUser(ctx, pr.AuthorID)
+	author, err := s.userStorage.GetUserTx(ctx, tx, pr.AuthorID)
 	if err != nil {
 		return nil, "", models.ErrNotFound
 	}
 
-	newReviewer, err := s.findReplacementReviewer(ctx, author.TeamName, pr.AssignedReviewers, req.OldUserID, pr.AuthorID)
+	newReviewer, err := s.findReplacementReviewer(ctx, tx, author.TeamName, pr.AssignedReviewers, req.OldUserID, pr.AuthorID)
 	if err != nil {
 		return nil, "", models.ErrNoCandidate
 	}
 
 	newReviewers := replaceInSlice(pr.AssignedReviewers, req.OldUserID, newReviewer)
-	err = s.PullRequestServ.UpdatePRReviewers(ctx, req.PullRequestID, newReviewers)
+	err = s.PullRequestServ.UpdatePRReviewersTx(ctx, tx, req.PullRequestID, newReviewers)
 	if err != nil {
 		return nil, "", err
 	}
 
-	updatedPR, err := s.PullRequestServ.GetPRByID(ctx, req.PullRequestID)
-	return updatedPR, newReviewer, err
+	updatedPR, err := s.PullRequestServ.GetPRByIDTx(ctx, tx, req.PullRequestID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, "", err
+	}
+
+	return updatedPR, newReviewer, nil
 }
 
 func (s *PullRequestService) GetUserReviews(ctx context.Context, userID string) ([]models.PullRequestShort, error) {
-	_, err := s.userStorage.GetUser(ctx, userID)
+	tx, err := s.PullRequestServ.PRBeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = s.userStorage.GetUserTx(ctx, tx, userID)
 	if err != nil {
 		return nil, models.ErrNotFound
 	}
 
-	return s.PullRequestServ.GetPRsByReviewer(ctx, userID)
+	prs, err := s.PullRequestServ.GetPRsByReviewerTx(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return prs, nil
 }
 
-func (s *PullRequestService) findReplacementReviewer(ctx context.Context, teamName string, currentReviewers []string, oldUserID string, authorID string) (string, error) {
-	team, err := s.teamStorage.GetTeamInfo(ctx, teamName)
+func (s *PullRequestService) findReplacementReviewer(ctx context.Context, tx pgx.Tx, teamName string, currentReviewers []string, oldUserID string, authorID string) (string, error) {
+	team, err := s.teamStorage.GetTeamInfoTx(ctx, tx, teamName)
 	if err != nil {
 		return "", err
 	}
 
 	for _, member := range team.Members {
-
 		if member.UserID == authorID ||
 			!member.IsActive ||
 			contains(currentReviewers, member.UserID) ||

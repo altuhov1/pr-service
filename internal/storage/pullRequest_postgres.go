@@ -8,12 +8,14 @@ package storage
 	4. Обновить ревьюеров
 	5. По ревьюеру найти PR
 	6. Проверить существование PR
+	7. Создать транзакцию
 
 
 
 Если у нас уже  "Merge" в таблице PR, то при выполнении функции Merge у нас
 ничего не произойдет, все произодйте в штатном порядке
 */
+
 import (
 	"context"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,7 +35,7 @@ func NewPullRequestPostgresStorage(pool *pgxpool.Pool) *PullRequestPostgresStora
 	return &PullRequestPostgresStorage{pool: pool}
 }
 
-func (s *PullRequestPostgresStorage) CreatePR(ctx context.Context, pr models.PullRequest) error {
+func (s *PullRequestPostgresStorage) CreatePRTx(ctx context.Context, tx pgx.Tx, pr models.PullRequest) error {
 	query := `
 		INSERT INTO pull_requests (
 			pull_request_id, 
@@ -44,7 +47,7 @@ func (s *PullRequestPostgresStorage) CreatePR(ctx context.Context, pr models.Pul
 		) VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	_, err := s.pool.Exec(ctx, query,
+	_, err := tx.Exec(ctx, query,
 		pr.PullRequestID,
 		pr.PullRequestName,
 		pr.AuthorID,
@@ -60,7 +63,7 @@ func (s *PullRequestPostgresStorage) CreatePR(ctx context.Context, pr models.Pul
 	return nil
 }
 
-func (s *PullRequestPostgresStorage) GetPRByID(ctx context.Context, prID string) (*models.PullRequest, error) {
+func (s *PullRequestPostgresStorage) GetPRByIDTx(ctx context.Context, tx pgx.Tx, prID string) (*models.PullRequest, error) {
 	query := `
 		SELECT 
 			pull_request_id,
@@ -77,7 +80,14 @@ func (s *PullRequestPostgresStorage) GetPRByID(ctx context.Context, prID string)
 	var pr models.PullRequest
 	var mergedAt *time.Time
 
-	err := s.pool.QueryRow(ctx, query, prID).Scan(
+	var row pgx.Row
+	if tx != nil {
+		row = tx.QueryRow(ctx, query, prID)
+	} else {
+		row = s.pool.QueryRow(ctx, query, prID)
+	}
+
+	err := row.Scan(
 		&pr.PullRequestID,
 		&pr.PullRequestName,
 		&pr.AuthorID,
@@ -101,26 +111,28 @@ func (s *PullRequestPostgresStorage) GetPRByID(ctx context.Context, prID string)
 	return &pr, nil
 }
 
-func (s *PullRequestPostgresStorage) MergePR(ctx context.Context, prID string) error {
+func (s *PullRequestPostgresStorage) MergePRTx(ctx context.Context, tx pgx.Tx, prID string) error {
 	query := `
 		UPDATE pull_requests 
 		SET status = $1, merged_at = $2
 		WHERE pull_request_id = $3 AND status != $1
 	`
 
-	result, err := s.pool.Exec(ctx, query,
-		"MERGED",
-		time.Now(),
-		prID,
-	)
+	var result pgconn.CommandTag
+	var err error
+
+	if tx != nil {
+		result, err = tx.Exec(ctx, query, "MERGED", time.Now(), prID)
+	} else {
+		result, err = s.pool.Exec(ctx, query, "MERGED", time.Now(), prID)
+	}
 
 	if err != nil {
 		return fmt.Errorf("failed to merge PR: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-
-		exists, err := s.CheckPRExists(ctx, prID)
+		exists, err := s.checkPRExistsTx(ctx, tx, prID)
 		if err != nil {
 			return err
 		}
@@ -132,18 +144,21 @@ func (s *PullRequestPostgresStorage) MergePR(ctx context.Context, prID string) e
 	return nil
 }
 
-func (s *PullRequestPostgresStorage) UpdatePRReviewers(ctx context.Context, prID string, reviewers []string) error {
+func (s *PullRequestPostgresStorage) UpdatePRReviewersTx(ctx context.Context, tx pgx.Tx, prID string, reviewers []string) error {
 	query := `
 		UPDATE pull_requests 
 		SET assigned_reviewers = $1
 		WHERE pull_request_id = $2 AND status = $3
 	`
 
-	result, err := s.pool.Exec(ctx, query,
-		reviewers,
-		prID,
-		"OPEN",
-	)
+	var result pgconn.CommandTag
+	var err error
+
+	if tx != nil {
+		result, err = tx.Exec(ctx, query, reviewers, prID, "OPEN")
+	} else {
+		result, err = s.pool.Exec(ctx, query, reviewers, prID, "OPEN")
+	}
 
 	if err != nil {
 		return fmt.Errorf("failed to update PR reviewers: %w", err)
@@ -156,7 +171,7 @@ func (s *PullRequestPostgresStorage) UpdatePRReviewers(ctx context.Context, prID
 	return nil
 }
 
-func (s *PullRequestPostgresStorage) GetPRsByReviewer(ctx context.Context, userID string) ([]models.PullRequestShort, error) {
+func (s *PullRequestPostgresStorage) GetPRsByReviewerTx(ctx context.Context, tx pgx.Tx, userID string) ([]models.PullRequestShort, error) {
 	query := `
 		SELECT 
 			pull_request_id,
@@ -168,7 +183,15 @@ func (s *PullRequestPostgresStorage) GetPRsByReviewer(ctx context.Context, userI
 		ORDER BY created_at DESC
 	`
 
-	rows, err := s.pool.Query(ctx, query, userID)
+	var rows pgx.Rows
+	var err error
+
+	if tx != nil {
+		rows, err = tx.Query(ctx, query, userID)
+	} else {
+		rows, err = s.pool.Query(ctx, query, userID)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to query PRs by reviewer: %w", err)
 	}
@@ -196,13 +219,24 @@ func (s *PullRequestPostgresStorage) GetPRsByReviewer(ctx context.Context, userI
 	return prs, nil
 }
 
-func (s *PullRequestPostgresStorage) CheckPRExists(ctx context.Context, prID string) (bool, error) {
-	var exists bool
-	err := s.pool.QueryRow(ctx,
-		"SELECT EXISTS(SELECT 1 FROM pull_requests WHERE pull_request_id = $1)",
-		prID,
-	).Scan(&exists)
+func (s *PullRequestPostgresStorage) PRBeginTx(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.Serializable,
+		AccessMode: pgx.ReadWrite,
+	})
+}
 
+func (s *PullRequestPostgresStorage) checkPRExistsTx(ctx context.Context, tx pgx.Tx, prID string) (bool, error) {
+	var exists bool
+
+	var row pgx.Row
+	if tx != nil {
+		row = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pull_requests WHERE pull_request_id = $1)", prID)
+	} else {
+		row = s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pull_requests WHERE pull_request_id = $1)", prID)
+	}
+
+	err := row.Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("failed to check PR existence: %w", err)
 	}
