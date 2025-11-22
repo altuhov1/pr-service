@@ -1,27 +1,168 @@
 package handlers
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
+	"test-task/internal/models"
+)
 
+// CreatePR создает новый Pull Request
 // POST /pullRequest/create
 func (h *Handler) CreatePR(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	var req models.CreatePRRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.PullRequestID == "" || req.PullRequestName == "" || req.AuthorID == "" {
+		writeError(w, http.StatusBadRequest, "pull_request_id, pull_request_name and author_id are required")
+		return
+	}
+
+	pr, err := h.PullRequestManag.CreatePR(r.Context(), req)
+	if err != nil {
+		switch err {
+		case models.ErrPRExists:
+			writeErrorResponse(w, http.StatusConflict, "PR_EXISTS", "PR id already exists")
+		case models.ErrNotFound:
+			writeErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "resource not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	response := map[string]interface{}{
+		"pr": pr,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
 }
 
+// MergePR помечает PR как мерженый
 // POST /pullRequest/merge
 func (h *Handler) MergePR(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	var req struct {
+		PullRequestID string `json:"pull_request_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.PullRequestID == "" {
+		writeError(w, http.StatusBadRequest, "pull_request_id is required")
+		return
+	}
+
+	pr, err := h.PullRequestManag.MergePR(r.Context(), req.PullRequestID)
+	if err != nil {
+		switch err {
+		case models.ErrNotFound:
+			writeErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "resource not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	response := map[string]interface{}{
+		"pr": pr,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
+// ReassignReviewer переназначает ревьювера
 // POST /pullRequest/reassign
 func (h *Handler) ReassignReviewer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	var req models.ReassignRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.PullRequestID == "" || req.OldUserID == "" {
+		writeError(w, http.StatusBadRequest, "pull_request_id and old_user_id are required")
+		return
+	}
+
+	pr, newReviewer, err := h.PullRequestManag.ReassignReviewer(r.Context(), req)
+	if err != nil {
+		switch err {
+		case models.ErrNotFound:
+			writeErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "resource not found")
+		case models.ErrPRMerged:
+			writeErrorResponse(w, http.StatusConflict, "PR_MERGED", "cannot reassign on merged PR")
+		case models.ErrNotAssigned:
+			writeErrorResponse(w, http.StatusConflict, "NOT_ASSIGNED", "reviewer is not assigned to this PR")
+		case models.ErrNoCandidate:
+			writeErrorResponse(w, http.StatusConflict, "NO_CANDIDATE", "no active replacement candidate in team")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	response := map[string]interface{}{
+		"pr":          pr,
+		"replaced_by": newReviewer,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetUserReviews возвращает PR где пользователь назначен ревьювером
+// GET /users/getReview
+func (h *Handler) GetUserReviews(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "user_id parameter is required")
+		return
+	}
+
+	prs, err := h.PullRequestManag.GetUserReviews(r.Context(), userID)
+	if err != nil {
+		switch err {
+		case models.ErrNotFound:
+			writeErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "resource not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	response := map[string]interface{}{
+		"user_id":       userID,
+		"pull_requests": prs,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

@@ -1,4 +1,4 @@
 FROM postgres:15
 
-COPY docker/postgres/init-scripts/ /docker-entrypoint-initdb.d/
+COPY scripts/docker/postgres/init-scripts/ /docker-entrypoint-initdb.d/
 RUN chmod +x /docker-entrypoint-initdb.d/*.sh

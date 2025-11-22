@@ -21,7 +21,12 @@ func (s *TeamService) CreateTeam(ctx context.Context, team models.Team) (*models
 	if err != nil {
 		return nil, err
 	}
-	return &team, nil
+
+	createdTeam, err := s.storage.GetTeamInfo(ctx, team.TeamName)
+	if err != nil {
+		return nil, err
+	}
+	return createdTeam, nil
 }
 
 func (s *TeamService) GetTeam(ctx context.Context, teamName string) (*models.Team, error) {

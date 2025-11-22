@@ -1,5 +1,9 @@
 package handlers
 
+/*
+	// POST /team/add
+	// GET /team/get
+*/
 import (
 	"encoding/json"
 	"net/http"
@@ -14,13 +18,17 @@ func (h *Handler) AddTeam(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		TeamName string              `json:"team_name"`
-		Members  []models.TeamMember `json:"members"`
+		TeamName string        `json:"team_name"`
+		Members  []models.User `json:"members"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	for i := range request.Members {
+		request.Members[i].TeamName = request.TeamName
 	}
 
 	team := models.Team{
@@ -74,22 +82,4 @@ func (h *Handler) GetTeam(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(team)
-}
-
-// Вспомогательные функции для ответов
-func writeError(w http.ResponseWriter, status int, message string) {
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": message,
-	})
-}
-
-func writeErrorResponse(w http.ResponseWriter, status int, code, message string) {
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": map[string]interface{}{
-			"code":    code,
-			"message": message,
-		},
-	})
 }

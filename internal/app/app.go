@@ -64,7 +64,7 @@ func (a *App) initStorages() {
 	}
 
 	a.storages = &Storages{
-		PullReq: storage.NewPullReqPostgresStorage(poolPG),
+		PullReq: storage.NewPullRequestPostgresStorage(poolPG),
 		Team:    storage.NewTeamPostgresStorage(poolPG),
 		User:    storage.NewUserPostgresStorage(poolPG),
 	}
@@ -72,9 +72,12 @@ func (a *App) initStorages() {
 
 func (a *App) initServices() {
 	a.services = &Services{
-		TeamManag:        services.NewTeamService(a.storages.Team),
-		UserManag:        services.NewUserService(),
-		PullRequestManag: services.NewPullRequestService(),
+		TeamManag: services.NewTeamService(a.storages.Team),
+		UserManag: services.NewUserService(a.storages.User),
+		PullRequestManag: services.NewPullRequestService(
+			a.storages.PullReq,
+			a.storages.User,
+			a.storages.Team),
 	}
 }
 
@@ -103,19 +106,16 @@ func (a *App) initHTTP() {
 func (a *App) setupRoutes(handler *handlers.Handler) http.Handler {
 	mux := http.NewServeMux()
 
-	// Static files
-	fs := http.FileServer(http.Dir("static"))
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
-
-	// API routes
 	apiRoutes := map[string]http.HandlerFunc{
-		"/team/add":             handler.AddTeam,
-		"/team/get":             handler.GetTeam,
-		"/users/setIsActive":    handler.SetUserIsActive,
+		"/team/add": handler.AddTeam,
+		"/team/get": handler.GetTeam,
+
+		"/users/setIsActive": handler.SetIsActive,
+		"/users/getReview":   handler.GetUserReviews,
+
 		"/pullRequest/create":   handler.CreatePR,
 		"/pullRequest/merge":    handler.MergePR,
 		"/pullRequest/reassign": handler.ReassignReviewer,
-		"/users/getReview":      handler.GetUserReviewPRs,
 	}
 	for path, handlerFunc := range apiRoutes {
 		mux.HandleFunc(path, handlerFunc)

@@ -1,5 +1,15 @@
 package storage
 
+/*
+Тесты через создание контейнера с постгрес
+Проверка:
+	1. Успешно ли создаются команды
+	2. Повторное создание команды с тем же именнем
+	3. Получение информацие по несуществующему имени
+	4. Проверка обновления данных
+	5. Проверка на праильно получение информации о пользователе
+
+*/
 import (
 	"context"
 	"test-task/internal/models"
@@ -39,15 +49,19 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS users (
-			user_id TEXT PRIMARY KEY,
-			is_active BOOLEAN NOT NULL
+		CREATE TABLE IF NOT EXISTS teams (
+			name TEXT PRIMARY KEY
 		);
 		
-		CREATE TABLE IF NOT EXISTS teams (
-			name TEXT PRIMARY KEY,
-			user_ids TEXT[] NOT NULL
+		CREATE TABLE IF NOT EXISTS users (
+			user_id TEXT PRIMARY KEY,
+			username TEXT NOT NULL,
+			team_name TEXT NOT NULL REFERENCES teams(name) ON DELETE CASCADE,
+			is_active BOOLEAN NOT NULL DEFAULT true
 		);
+
+		CREATE INDEX IF NOT EXISTS idx_users_team ON users(team_name);
+		CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
 	`)
 	require.NoError(t, err)
 
@@ -61,9 +75,9 @@ func TestTeamPostgresStorage_CreateTeam_Success(t *testing.T) {
 
 	team := models.Team{
 		TeamName: "backend",
-		Members: []models.TeamMember{
-			{UserID: "u1", Username: "Alice", IsActive: true},
-			{UserID: "u2", Username: "Bob", IsActive: true},
+		Members: []models.User{
+			{UserID: "u1", Username: "Alice", TeamName: "backend", IsActive: true},
+			{UserID: "u2", Username: "Bob", TeamName: "backend", IsActive: true},
 		},
 	}
 
@@ -83,8 +97,8 @@ func TestTeamPostgresStorage_CreateTeam_AlreadyExists(t *testing.T) {
 
 	team := models.Team{
 		TeamName: "payments",
-		Members: []models.TeamMember{
-			{UserID: "u1", Username: "Alice", IsActive: true},
+		Members: []models.User{
+			{UserID: "u1", Username: "Alice", TeamName: "payments", IsActive: true},
 		},
 	}
 
@@ -100,21 +114,20 @@ func TestTeamPostgresStorage_GetTeamInfo_NotFound(t *testing.T) {
 	storage := NewTeamPostgresStorage(pool)
 	ctx := context.Background()
 
-	// Пытаемся получить несуществующую команду
 	team, err := storage.GetTeamInfo(ctx, "nonexistent")
 	assert.ErrorIs(t, err, models.ErrNotFound)
 	assert.Nil(t, team)
 }
 
-func TestTeamPostgresStorage_CreateTeam_UpdatesUserActivity(t *testing.T) {
+func TestTeamPostgresStorage_CreateTeam_UpdatesUserTeam(t *testing.T) {
 	pool := setupTestDB(t)
 	storage := NewTeamPostgresStorage(pool)
 	ctx := context.Background()
 
 	team1 := models.Team{
 		TeamName: "team1",
-		Members: []models.TeamMember{
-			{UserID: "u1", Username: "Alice", IsActive: true},
+		Members: []models.User{
+			{UserID: "u1", Username: "Alice", TeamName: "team1", IsActive: true},
 		},
 	}
 	err := storage.CreateTeam(ctx, team1)
@@ -122,8 +135,8 @@ func TestTeamPostgresStorage_CreateTeam_UpdatesUserActivity(t *testing.T) {
 
 	team2 := models.Team{
 		TeamName: "team2",
-		Members: []models.TeamMember{
-			{UserID: "u1", Username: "Alice", IsActive: false},
+		Members: []models.User{
+			{UserID: "u1", Username: "Alice", TeamName: "team2", IsActive: false},
 		},
 	}
 	err = storage.CreateTeam(ctx, team2)
@@ -131,5 +144,51 @@ func TestTeamPostgresStorage_CreateTeam_UpdatesUserActivity(t *testing.T) {
 
 	team, err := storage.GetTeamInfo(ctx, "team2")
 	require.NoError(t, err)
+	assert.Equal(t, "team2", team.Members[0].TeamName)
 	assert.False(t, team.Members[0].IsActive)
+}
+
+func TestTeamPostgresStorage_GetTeamInfo_Success(t *testing.T) {
+	pool := setupTestDB(t)
+	storage := NewTeamPostgresStorage(pool)
+	ctx := context.Background()
+
+	expectedTeam := models.Team{
+		TeamName: "frontend",
+		Members: []models.User{
+			{UserID: "u1", Username: "Alice", TeamName: "frontend", IsActive: true},
+			{UserID: "u2", Username: "Bob", TeamName: "frontend", IsActive: true},
+			{UserID: "u3", Username: "Charlie", TeamName: "frontend", IsActive: false},
+		},
+	}
+
+	err := storage.CreateTeam(ctx, expectedTeam)
+	require.NoError(t, err)
+
+	actualTeam, err := storage.GetTeamInfo(ctx, "frontend")
+	require.NoError(t, err)
+	require.NotNil(t, actualTeam)
+
+	assert.Equal(t, expectedTeam.TeamName, actualTeam.TeamName)
+	assert.Len(t, actualTeam.Members, 3)
+
+	memberMap := make(map[string]models.User)
+	for _, member := range actualTeam.Members {
+		memberMap[member.UserID] = member
+	}
+
+	assert.Contains(t, memberMap, "u1")
+	assert.Equal(t, "Alice", memberMap["u1"].Username)
+	assert.Equal(t, "frontend", memberMap["u1"].TeamName)
+	assert.True(t, memberMap["u1"].IsActive)
+
+	assert.Contains(t, memberMap, "u2")
+	assert.Equal(t, "Bob", memberMap["u2"].Username)
+	assert.Equal(t, "frontend", memberMap["u2"].TeamName)
+	assert.True(t, memberMap["u2"].IsActive)
+
+	assert.Contains(t, memberMap, "u3")
+	assert.Equal(t, "Charlie", memberMap["u3"].Username)
+	assert.Equal(t, "frontend", memberMap["u3"].TeamName)
+	assert.False(t, memberMap["u3"].IsActive)
 }

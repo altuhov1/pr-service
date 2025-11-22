@@ -1,5 +1,16 @@
 package storage
 
+/*
+Основные функции:
+	1. Создание команды
+	2. Получение информации о команде
+
+Создание команды проихсодит атомарно.
+При создании происходит проверка через SQL запрос на то, существет
+ли человек, если да - обновляем его данные.
+
+Поиск юзеров за log из-за индексов
+*/
 import (
 	"context"
 	"fmt"
@@ -14,7 +25,6 @@ type TeamPostgresStorage struct {
 }
 
 func NewTeamPostgresStorage(pool *pgxpool.Pool) *TeamPostgresStorage {
-
 	return &TeamPostgresStorage{pool: pool}
 }
 
@@ -34,33 +44,28 @@ func (s *TeamPostgresStorage) CreateTeam(ctx context.Context, team models.Team) 
 		return models.ErrTeamExists
 	}
 
+	_, err = tx.Exec(ctx, "INSERT INTO teams (name) VALUES ($1)", team.TeamName)
+	if err != nil {
+		return fmt.Errorf("failed to create team: %w", err)
+	}
+
 	for _, member := range team.Members {
 		if err := s.createUser(ctx, tx, member); err != nil {
 			return fmt.Errorf("failed to create user %s: %w", member.UserID, err)
 		}
 	}
 
-	userIDs := make([]string, len(team.Members))
-	for i, member := range team.Members {
-		userIDs[i] = member.UserID
-	}
-
-	_, err = tx.Exec(ctx, "INSERT INTO teams (name, user_ids) VALUES ($1, $2)", team.TeamName, userIDs)
-	if err != nil {
-		return fmt.Errorf("failed to create team: %w", err)
-	}
-
 	return tx.Commit(ctx)
 }
 
-func (s *TeamPostgresStorage) createUser(ctx context.Context, tx pgx.Tx, user models.TeamMember) error {
+func (s *TeamPostgresStorage) createUser(ctx context.Context, tx pgx.Tx, user models.User) error {
 	query := `
-		INSERT INTO users (user_id, is_active) 
-		VALUES ($1, $2)
+		INSERT INTO users (user_id, username, team_name, is_active) 
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id) 
-		DO UPDATE SET is_active = EXCLUDED.is_active
+		DO UPDATE SET username = EXCLUDED.username, team_name = EXCLUDED.team_name, is_active = EXCLUDED.is_active
 	`
-	_, err := tx.Exec(ctx, query, user.UserID, user.IsActive)
+	_, err := tx.Exec(ctx, query, user.UserID, user.Username, user.TeamName, user.IsActive)
 	if err != nil {
 		return fmt.Errorf("failed to create/update user: %w", err)
 	}
@@ -69,10 +74,14 @@ func (s *TeamPostgresStorage) createUser(ctx context.Context, tx pgx.Tx, user mo
 
 func (s *TeamPostgresStorage) GetTeamInfo(ctx context.Context, teamName string) (*models.Team, error) {
 	query := `
-        SELECT t.name, u.user_id, u.is_active
+        SELECT 
+            t.name as team_name, 
+            u.user_id, 
+            u.username, 
+            u.team_name, 
+            u.is_active
         FROM teams t
-        CROSS JOIN UNNEST(t.user_ids) AS user_id
-        JOIN users u USING (user_id)
+        JOIN users u ON u.team_name = t.name
         WHERE t.name = $1
         ORDER BY u.user_id
     `
@@ -84,19 +93,21 @@ func (s *TeamPostgresStorage) GetTeamInfo(ctx context.Context, teamName string) 
 	defer rows.Close()
 
 	var team models.Team
-	var members []models.TeamMember
+	var members []models.User
 
 	for rows.Next() {
-		var member models.TeamMember
-		var teamName string
-
-		err := rows.Scan(&teamName, &member.UserID, &member.IsActive)
+		var user models.User
+		err := rows.Scan(
+			&team.TeamName,
+			&user.UserID,
+			&user.Username,
+			&user.TeamName,
+			&user.IsActive,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan team member: %w", err)
 		}
-
-		team.TeamName = teamName
-		members = append(members, member)
+		members = append(members, user)
 	}
 
 	if err := rows.Err(); err != nil {
