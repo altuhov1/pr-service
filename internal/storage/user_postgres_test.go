@@ -125,7 +125,6 @@ func TestUserPostgresStorage_UpdateUserActive(t *testing.T) {
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
-		// Проверяем, что обновление применилось
 		tx2, err := storage.UserBeginTx(ctx)
 		require.NoError(t, err)
 		defer tx2.Rollback(ctx)

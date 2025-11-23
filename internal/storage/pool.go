@@ -12,7 +12,6 @@ import (
 func NewPoolPg(cfg *models.PGXConfig) (*pgxpool.Pool, error) {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName, cfg.SSLMode)
-	fmt.Println(connStr)
 	config, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка конфигурации: %w", err)

@@ -25,7 +25,6 @@ func NewTeamService(storage storage.TeamStorage) *TeamService {
 	}
 }
 
-// executeWithRetryTeam выполняет операцию с повторными попытками при ЛЮБОЙ ошибке
 func (s *TeamService) executeWithRetryTeam(ctx context.Context, operation func() error) error {
 	maxRetries := 3
 	var lastErr error
