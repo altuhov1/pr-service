@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"html/template"
+	"log/slog"
 	"net/http"
+	"os"
 	"test-task/internal/services"
 )
 
@@ -10,18 +13,28 @@ type Handler struct {
 	TeamManag        services.TeamManager
 	UserManag        services.UserManager
 	PullRequestManag services.PullRequestManager
+	statService      *services.StatService
+	tmpl             *template.Template
 }
 
 func NewHandler(
 	TeamManag services.TeamManager,
 	UserManag services.UserManager,
 	PullRequestManag services.PullRequestManager,
+	statService *services.StatService,
 ) (*Handler, error) {
+	tmpl, err := template.ParseFiles("static/stats.html")
+	if err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
+	}
 
 	return &Handler{
 		TeamManag:        TeamManag,
 		UserManag:        UserManag,
 		PullRequestManag: PullRequestManag,
+		statService:      statService,
+		tmpl:             tmpl,
 	}, nil
 }
 

@@ -27,6 +27,7 @@ type Services struct {
 	TeamManag        services.TeamManager
 	UserManag        services.UserManager
 	PullRequestManag services.PullRequestManager
+	Stat             *services.StatService
 }
 
 type Storages struct {
@@ -78,6 +79,7 @@ func (a *App) initServices() {
 			a.storages.PullReq,
 			a.storages.User,
 			a.storages.Team),
+		Stat: services.NewStatService(),
 	}
 }
 
@@ -86,6 +88,7 @@ func (a *App) initHTTP() {
 		a.services.TeamManag,
 		a.services.UserManag,
 		a.services.PullRequestManag,
+		a.services.Stat,
 	)
 	if err != nil {
 		slog.Error("Failed to create handler", "error", err)
@@ -116,6 +119,9 @@ func (a *App) setupRoutes(handler *handlers.Handler) http.Handler {
 		"/pullRequest/create":   handler.CreatePR,
 		"/pullRequest/merge":    handler.MergePR,
 		"/pullRequest/reassign": handler.ReassignReviewer,
+
+		"/stat/json": handler.JSONHandler,
+		"/stat/html": handler.HTMLHandler,
 	}
 	for path, handlerFunc := range apiRoutes {
 		mux.HandleFunc(path, handlerFunc)

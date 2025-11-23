@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Server Stats</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        .container {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .stat-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #3d3d3d;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .stat-section h2 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #555;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            font-weight: bold;
+            color: #b0b0b0;
+        }
+
+        .stat-value {
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        .uptime {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+            font-weight: bold;
+            font-size: 1.1em;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .timestamp {
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #444;
+        }
+
+        /* Специфичные стили для секций */
+        .stat-section:nth-child(2) {
+            border-left-color: #2196F3;
+            /* Синий для System */
+        }
+
+        .stat-section:nth-child(2) h2 {
+            color: #2196F3;
+        }
+
+        .stat-section:nth-child(3) {
+            border-left-color: #FF9800;
+            /* Оранжевый для Memory */
+        }
+
+        .stat-section:nth-child(3) h2 {
+            color: #FF9800;
+        }
+
+        .stat-section:nth-child(4) {
+            border-left-color: #9C27B0;
+            /* Фиолетовый для Server */
+        }
+
+        .stat-section:nth-child(4) h2 {
+            color: #9C27B0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Server Statistics</h1>
+
+        <div class="uptime">
+            Uptime: {{.FormattedUptime}}
+        </div>
+
+        <div class="stat-section">
+            <h2>🖥️ System</h2>
+            <div class="stat-item">
+                <span class="stat-label">Goroutines:</span>
+                <span class="stat-value">{{.System.Goroutines}}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">CPU Cores:</span>
+                <span class="stat-value">{{.System.CPUCores}}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Go Version:</span>
+                <span class="stat-value">{{.System.GoVersion}}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">OS/Arch:</span>
+                <span class="stat-value">{{.System.OS}}/{{.System.Arch}}</span>
+            </div>
+        </div>
+
+        <div class="stat-section">
+            <h2>Memory</h2>
+            <div class="stat-item">
+                <span class="stat-label">Allocated:</span>
+                <span class="stat-value">{{.Memory.Alloc}} bytes</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Total Allocated:</span>
+                <span class="stat-value">{{.Memory.TotalAlloc}} bytes</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">System Memory:</span>
+                <span class="stat-value">{{.Memory.Sys}} bytes</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Garbage Collections:</span>
+                <span class="stat-value">{{.Memory.NumGC}}</span>
+            </div>
+        </div>
+
+        <div class="stat-section">
+            <h2>Server</h2>
+            <div class="stat-item">
+                <span class="stat-label">Start Time:</span>
+                <span class="stat-value">{{.Server.StartTime}}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Total Requests:</span>
+                <span class="stat-value">{{.Server.TotalRequests}}</span>
+            </div>
+        </div>
+
+        <div class="timestamp">
+            Generated at: {{.Timestamp}}
+        </div>
+    </div>
+</body>
+
+</html>
