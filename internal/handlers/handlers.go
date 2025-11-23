@@ -23,7 +23,11 @@ func NewHandler(
 	PullRequestManag services.PullRequestManager,
 	statService *services.StatService,
 ) (*Handler, error) {
-	tmpl, err := template.ParseFiles("static/stats.html")
+	tmpl := template.New("stats.html").Funcs(template.FuncMap{
+		"formatBytes": formatBytes,
+	})
+
+	tmpl, err := tmpl.ParseFiles("static/stats.html")
 	if err != nil {
 		slog.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)

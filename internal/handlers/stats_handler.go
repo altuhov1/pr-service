@@ -54,3 +54,22 @@ func formatDurationPart(value int, unit string) string {
 	}
 	return strconv.Itoa(value) + unit + " "
 }
+
+func formatBytes(bytes uint64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case bytes >= GB:
+		return strconv.FormatFloat(float64(bytes)/float64(GB), 'f', 2, 64) + " GB"
+	case bytes >= MB:
+		return strconv.FormatFloat(float64(bytes)/float64(MB), 'f', 2, 64) + " MB"
+	case bytes >= KB:
+		return strconv.FormatFloat(float64(bytes)/float64(KB), 'f', 2, 64) + " KB"
+	default:
+		return strconv.FormatUint(bytes, 10) + " B"
+	}
+}

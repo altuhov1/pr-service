@@ -139,15 +139,15 @@
             <h2>Memory</h2>
             <div class="stat-item">
                 <span class="stat-label">Allocated:</span>
-                <span class="stat-value">{{.Memory.Alloc}} bytes</span>
+                <span class="stat-value">{{.Memory.Alloc | formatBytes}}</span>
             </div>
             <div class="stat-item">
                 <span class="stat-label">Total Allocated:</span>
-                <span class="stat-value">{{.Memory.TotalAlloc}} bytes</span>
+                <span class="stat-value">{{.Memory.TotalAlloc| formatBytes}} </span>
             </div>
             <div class="stat-item">
                 <span class="stat-label">System Memory:</span>
-                <span class="stat-value">{{.Memory.Sys}} bytes</span>
+                <span class="stat-value">{{.Memory.Sys| formatBytes}}</span>
             </div>
             <div class="stat-item">
                 <span class="stat-label">Garbage Collections:</span>
