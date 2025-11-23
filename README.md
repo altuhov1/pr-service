@@ -65,3 +65,14 @@ make test
 ```bash
 docker logs -f test-task-caddy-1
 ```
+
+---
+
+## Скриншоты
+ 
+<div align="center">
+
+### Статистика 
+![Форма регистрации](./static/photo/html.png)  
+
+</div>
