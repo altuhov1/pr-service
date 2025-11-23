@@ -1,5 +1,11 @@
 package handlers
 
+/*
+	// POST /pullRequest/create
+	// POST /pullRequest/merge
+	// POST /pullRequest/reassign
+
+*/
 import (
 	"encoding/json"
 	"net/http"

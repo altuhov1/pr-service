@@ -8,7 +8,7 @@ import (
 )
 
 type Config struct {
-	ServerPort                string `env:"PORT" envDefault:"8080"`
+	ServerPort                string `env:"PORT_APP" envDefault:"8080"`
 	NameFileAllTasks          string `env:"ALL_TASKS_FILE" envDefault:"storage/AllTasks.json"`
 	NameFileProcessTasksLinks string `env:"PROCESS_LINKS_FILE" envDefault:"storage/ProcessTasksLinks.json"`
 	NameFileProcessTasksNums  string `env:"PROCESS_NUMS_FILE" envDefault:"storage/ProcessTasksNums.json"`

@@ -23,7 +23,7 @@ e2e:
 		chmod +x $(E2E_SCRIPT) && \
 		$(E2E_SCRIPT); \
 	else \
-		echo "💡 Create scripts/e2e_test.sh with curl commands"; \
+		echo "Create scripts/e2e_test.sh with curl commands"; \
 		exit 1; \
 	fi
 .PHONY: help run build clean test deps e2e

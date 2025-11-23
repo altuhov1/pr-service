@@ -1,5 +1,8 @@
 package handlers
-
+/*
+	// POST /users/setIsActive
+	// GET /users/getReview
+*/
 import (
 	"encoding/json"
 	"net/http"
