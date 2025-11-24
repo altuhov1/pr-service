@@ -40,8 +40,10 @@
 | `/pullRequest/create`             | POST  | Создаёт PR и назначает ревьюверов              |
 | `/pullRequest/merge`              | POST  | Помечает PR как `MERGED` (идемпотентно)        |
 | `/pullRequest/reassign`           | POST  | Переназначает одного ревьювера на другого      |
-| `/stat/json`              | GET  |Запрос статистики в json       |
-| `/stat/html`           | GET  | Просмотр статистики в html     |
+| `/stat/json`              | GET  |Запрос статистики в json формате     |
+| `/stat/html`           | GET  | Просмотр статистики в html* формате   |
+
+*Фото ниже
 
 ----
 
