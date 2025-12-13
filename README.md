@@ -65,6 +65,33 @@ make test
 
 ----
 
+## Миграции
+```bash
+# запускаем постгрес
+docker compose up postgres -d
+
+# Применить все миграции
+docker compose run --rm migrate up
+
+# Посмотреть статус
+docker compose run --rm migrate status
+
+# Откатить последнюю миграцию
+docker compose run --rm migrate down
+
+# Откатить до конкретной версии (например, 1)
+docker compose run --rm migrate down 1
+
+# Сбросить всё (down всех миграций)
+docker compose run --rm migrate reset
+
+# Узнать текущую версию
+docker compose run --rm migrate version
+
+```
+
+----
+
 ## Сетевые логи
 ```bash
 docker logs -f subscription-budget-caddy-1
