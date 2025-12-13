@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
-	"test-task/internal/models"
+	"subscription-budget/internal/models"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"

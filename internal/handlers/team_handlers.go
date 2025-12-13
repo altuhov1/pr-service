@@ -7,7 +7,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"test-task/internal/models"
+	"subscription-budget/internal/models"
 )
 
 // POST /team/add

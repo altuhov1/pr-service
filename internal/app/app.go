@@ -7,13 +7,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"test-task/internal/models"
-	"test-task/internal/services"
+	"subscription-budget/internal/models"
+	"subscription-budget/internal/services"
 	"time"
 
-	"test-task/internal/config"
-	"test-task/internal/handlers"
-	"test-task/internal/storage"
+	"subscription-budget/internal/config"
+	"subscription-budget/internal/handlers"
+	"subscription-budget/internal/storage"
 )
 
 type App struct {

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"test-task/internal/services"
+	"subscription-budget/internal/services"
 )
 
 type Handler struct {

@@ -67,7 +67,7 @@ make test
 
 ## Сетевые логи
 ```bash
-docker logs -f test-task-caddy-1
+docker logs -f subscription-budget-caddy-1
 ```
 
 ---

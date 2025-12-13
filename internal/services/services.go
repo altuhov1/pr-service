@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"test-task/internal/models"
+	"subscription-budget/internal/models"
 )
 
 type TeamManager interface {

@@ -3,7 +3,7 @@ package services
 import (
 	"runtime"
 	"sync"
-	"test-task/internal/models"
+	"subscription-budget/internal/models"
 	"time"
 )
 

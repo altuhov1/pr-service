@@ -3,8 +3,8 @@ package main
 import (
 	"log/slog"
 	"os"
-	"test-task/internal/app"
-	"test-task/internal/config"
+	"subscription-budget/internal/app"
+	"subscription-budget/internal/config"
 )
 
 func main() {

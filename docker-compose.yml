@@ -1,20 +1,36 @@
 services:
   postgres:
-    build:
-      context: .
-      dockerfile: Dockerfile.postgres
+    image: postgres:15
     environment:
-      POSTGRES_USER: ${USER_DB_PG} 
+      POSTGRES_USER: ${MAIN_USER_DB_PG}
       POSTGRES_PASSWORD: ${PASS_DB_PG}
       POSTGRES_DB: ${NAME_DB_PG}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 15s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    environment:
+      DB_PG_HOST: ${DB_PG_HOST}
+      USER_DB_PG: ${MAIN_USER_DB_PG}
+      PASS_DB_PG: ${PASS_DB_PG}
+      NAME_DB_PG: ${NAME_DB_PG}
+      APP_USER: ${USER_DB_PG}
+      APP_PASSWORD: ${PASS_DB_PG}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["up"]
     networks:
       - internal
 
@@ -26,8 +42,8 @@ services:
       context: .
       dockerfile: Dockerfile.golang
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   caddy:
     image: caddy:2-alpine

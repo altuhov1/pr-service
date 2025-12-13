@@ -10,8 +10,8 @@ package services
 */
 import (
 	"context"
-	"test-task/internal/models"
-	"test-task/internal/storage"
+	"subscription-budget/internal/models"
+	"subscription-budget/internal/storage"
 	"time"
 )
 

@@ -12,7 +12,7 @@ package storage
 */
 import (
 	"context"
-	"test-task/internal/models"
+	"subscription-budget/internal/models"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"

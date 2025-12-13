@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"test-task/internal/models"
+	"subscription-budget/internal/models"
 	"time"
 )
 

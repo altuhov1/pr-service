@@ -14,8 +14,8 @@ package services
 import (
 	"context"
 	"strings"
-	"test-task/internal/models"
-	"test-task/internal/storage"
+	"subscription-budget/internal/models"
+	"subscription-budget/internal/storage"
 	"time"
 
 	"github.com/jackc/pgx/v5"
