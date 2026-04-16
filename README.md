@@ -49,10 +49,9 @@
 
 ## Запуск
 ```bash
+cp .env.example .env 
 docker compose up --build 
 ```
-
-В реальном проекте нельзя отправлять .env файл на сервер, надо прописывать cp .env.example .env 
 
 ----
 
